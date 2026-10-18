@@ -1,53 +1,56 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 | Linux |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- | ----- |
+# ARC2026 - ESP32 PS4 Controller Robot Control System
 
-# Hello World Example
+ESP32を搭載したロボット用制御システムです。Bluetooth経由でPS4コントローラ（DualShock 4）と通信し、2つのDCモータ（Hブリッジドライバ）をPWMおよびGPIO制御で駆動します。
 
-Starts a FreeRTOS task to print "Hello World".
+## 構成概要
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+- **対応マイコン**: ESP32
+- **通信方式**: Bluetooth Classic (HID Host / L2CAP)
+- **入力デバイス**: PS4コントローラ (DualShock 4)
+- **モータドライバ**: HブリッジDCモータドライバ（2軸独立制御）
 
-## How to use example
+## 操作仕様
 
-Follow detailed instructions provided specifically for this example.
+| 操作系統 | スティック | 制御内容 |
+| :--- | :--- | :--- |
+| **前後移動** | **左スティック (Y軸)** | 上入力で前進、下入力で後退（デッドゾーン処理付き） |
+| **旋回移動** | **右スティック (X軸)** | 右操作で右旋回、左操作で左旋回（デッドゾーン処理付き） |
 
-Select the instructions depending on Espressif chip installed on your development board:
+- **差動ミキシング演算**: 左スティックの前後出力と右スティックの旋回出力をミキシング演算し、左右のモータ速度（-255 〜 +255）へ自動変換・出力します。
+- **安全停止機能（フェールセーフ）**: パケット受信が 500ms 以上途絶えた場合、安全のため全モータを惰性停止します。
 
-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+## GPIO ピン配置 (デフォルト)
 
+| 接続先 | 信号線 | ESP32 GPIO | 制御方式 |
+| :--- | :--- | :--- | :--- |
+| **左モータ** | IN1 | **GPIO 18** | LEDC PWM (Channel 0) |
+| **左モータ** | IN2 | **GPIO 19** | LEDC PWM (Channel 1) |
+| **右モータ** | IN1 | **GPIO 22** | LEDC PWM (Channel 2) |
+| **右モータ** | IN2 | **GPIO 23** | LEDC PWM (Channel 3) |
 
-## Example folder contents
+### Hブリッジ動作ロジック
 
-The project **ARC2026** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
+| IN1 | IN2 | 動作状態 |
+| :---: | :---: | :--- |
+| **PWM** | **L** | **正転** (速度に応じたPWM出力) |
+| **L** | **PWM** | **逆転** (速度に応じたPWM出力) |
+| **H** | **H** | **電子ブレーキ** |
+| **L** | **L** | **惰性停止** |
 
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both).
+## Bluetooth MACアドレス設定
 
-Below is short explanation of remaining files in the project folder.
+`main/main.c` 内の `#define BT_MAC_ADDRESS` でターゲットコントローラのMACアドレスを指定できます。
+ひとまずデフォルトとして `"00:0A:0A:0A:0A:0A"` (`0A:0A:0A:0A`) を設定しています。
 
+```c
+#define BT_MAC_ADDRESS "00:0A:0A:0A:0A:0A"
 ```
-├── CMakeLists.txt
-├── pytest_main.py      Python script used for automated testing
-├── main
-│   ├── CMakeLists.txt
-│   └── main.c
-└── README.md                  This is the file you are currently reading
-```
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
+## ビルド・実行手順 (VS Code ESP-IDF 拡張機能)
 
-## Troubleshooting
+1. **VS Code でプロジェクトを開く**: 本フォルダ (`ARC2026`) を VS Code で開きます。
+2. **ターゲットデバイスの選択**: ステータスバーから `esp32` を選択します。
+3. **COMポートの選択**: ESP32が接続されているシリアルポート（例: `COM7`）を選択します。
+4. **ビルド (Build)**: ステータスバーのビルドボタン（または `Ctrl+E B`）を押します。
+5. **書き込み (Flash & Monitor)**: 端末へフラッシュ書き込みを行い、シリアルモニタでログを確認します。
 
-* Program upload failure
-
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
-
-## Technical support and feedback
-
-Please use the following feedback channels:
-
-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
-
-We will get back to you as soon as possible.
