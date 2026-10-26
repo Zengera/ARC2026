@@ -37,14 +37,21 @@ ESP32を搭載したロボット用制御システムです。Bluetooth経由で
 | **H** | **H** | **電子ブレーキ** |
 | **L** | **L** | **惰性停止** |
 
-## Bluetooth MACアドレス設定
+## Bluetooth MACアドレス設定および確認
 
-`main/main.c` 内の `#define BT_MAC_ADDRESS` でターゲットコントローラのMACアドレスを指定できます。
-ひとまずデフォルトとして `"00:0A:0A:0A:0A:0A"` (`0A:0A:0A:0A`) を設定しています。
+ESP32起動時にシリアルモニタへ自身の Bluetooth MAC アドレス (BD_ADDR) が出力されます。
 
-```c
-#define BT_MAC_ADDRESS "00:0A:0A:0A:0A:0A"
+```text
+==================================================
+ ESP32 Bluetooth MAC Address (BD_ADDR):
+ >>  XX:XX:XX:XX:XX:XX  <<
+ (PS4コントローラのペアリング時にこのMACアドレスを指定してください)
+==================================================
 ```
+
+- **ペアリング設定**: PS4コントローラ（DualShock 4）にペアリング設定を行う際、上記で表示された ESP32 の MAC アドレスをペアリングツール（SixaxisPairTool 等）でコントローラへ書き込んでください。
+- **プログラム側設定**: `main/main.c` 内の `#define BT_MAC_ADDRESS` でターゲットコントローラのMACアドレスを指定できます。
+
 
 ## ビルド・実行手順 (VS Code ESP-IDF 拡張機能)
 
