@@ -9,8 +9,8 @@ static const char *TAG = "MOTOR_DRIVER";
 #define DEFAULT_GPIO_RIGHT_IN1  GPIO_NUM_22
 #define DEFAULT_GPIO_RIGHT_IN2  GPIO_NUM_23
 
-// LEDC (PWM) 定義
-#define LEDC_SPEED_MODE         LEDC_LOW_SPEED_MODE
+// LEDC (PWM) 定義 (ESP32では20kHz等のPWMにはHIGH_SPEED_MODEが安定動作します)
+#define LEDC_SPEED_MODE         LEDC_HIGH_SPEED_MODE
 #define LEDC_TIMER_NUM          LEDC_TIMER_0
 #define LEDC_DUTY_RES           LEDC_TIMER_8_BIT // 分解能: 0 〜 255
 #define LEDC_FREQUENCY          20000             // PWM周波数 20kHz
@@ -22,8 +22,15 @@ static const char *TAG = "MOTOR_DRIVER";
 #define LEDC_CHANNEL_RIGHT_IN2  LEDC_CHANNEL_3
 
 static motor_config_t s_motor_cfg;
+static int32_t s_channel_duty[4] = {-1, -1, -1, -1};
 
 static void set_ledc_duty(ledc_channel_t channel, uint32_t duty) {
+    if (channel < 4 && s_channel_duty[channel] == (int32_t)duty) {
+        return; // 同じDuty値の場合は更新をスキップ（不要なレジスタ競合・ビジーループ防止）
+    }
+    if (channel < 4) {
+        s_channel_duty[channel] = (int32_t)duty;
+    }
     ledc_set_duty(LEDC_SPEED_MODE, channel, duty);
     ledc_update_duty(LEDC_SPEED_MODE, channel);
 }
@@ -90,6 +97,7 @@ void motor_driver_init(const motor_config_t *config) {
 
     for (int i = 0; i < 4; i++) {
         ESP_ERROR_CHECK(ledc_channel_config(&ledc_channels[i]));
+        s_channel_duty[i] = 0; // 初期状態(duty=0)をキャッシュに反映
     }
 
     // 初期状態: 全モータ停止（惰性停止）

@@ -1,8 +1,20 @@
 idf_component_register(
-    SRCS "main.c" "motor_driver.c"
-    INCLUDE_DIRS "."
-    PRIV_REQUIRES nvs_flash bt driver esp_driver_ledc esp_driver_gpio log PS4Controller
+    SRCS
+        "main.c"
+        "motor_driver.c"
+        "PS4-esp32-develop/src/ps4.c"
+        "PS4-esp32-develop/src/ps4_l2cap.c"
+        "PS4-esp32-develop/src/ps4_parser.c"
+        "PS4-esp32-develop/src/ps4_spp.c"
+    INCLUDE_DIRS
+        "."
+        "PS4-esp32-develop/src"
+    PRIV_REQUIRES
+        bt
+        nvs_flash
+        esp_timer
+        esp_hw_support
+        esp_driver_ledc
+        esp_driver_gpio
 )
-
-
 

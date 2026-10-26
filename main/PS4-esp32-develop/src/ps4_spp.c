@@ -1,3 +1,4 @@
+#include "esp_idf_version.h"
 #include "esp_bt.h"
 #include "esp_bt_device.h"
 #include "esp_bt_main.h"
@@ -58,10 +59,22 @@ void sppInit() {
     return;
   }
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  esp_spp_cfg_t bt_spp_cfg = {
+    .mode = ESP_SPP_MODE_CB,
+    .enable_l2cap_ertm = true,
+    .tx_buffer_size = 0,
+  };
+  if ((ret = esp_spp_enhanced_init(&bt_spp_cfg)) != ESP_OK) {
+    ESP_LOGE(PS4_TAG, "%s spp init failed: %s\n", __func__, esp_err_to_name(ret));
+    return;
+  }
+#else
   if ((ret = esp_spp_init(ESP_SPP_MODE_CB)) != ESP_OK) {
     ESP_LOGE(PS4_TAG, "%s spp init failed: %s\n", __func__, esp_err_to_name(ret));
     return;
   }
+#endif
 }
 
 /********************************************************************************/
@@ -81,7 +94,11 @@ void sppInit() {
 static void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t* param) {
   if (event == ESP_SPP_INIT_EVT) {
     ESP_LOGI(PS4_TAG, "ESP_SPP_INIT_EVT");
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    esp_bt_gap_set_device_name("ESP Host");
+#else
     esp_bt_dev_set_device_name("ESP Host");
+#endif
 
 #if CONFIG_IDF_COMPATIBILITY >= IDF_COMPATIBILITY_MASTER_6495810
     esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
