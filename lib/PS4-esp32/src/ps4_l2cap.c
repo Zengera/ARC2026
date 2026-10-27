@@ -53,7 +53,6 @@ static const tL2CAP_APPL_INFO dyn_info = {
 static tL2CAP_CFG_INFO ps4_cfg_info;
 
 bool is_connected = false;
-static bool is_congested = false;
 uint16_t l2cap_control_channel = 0;
 uint16_t l2cap_interrupt_channel = 0;
 
@@ -104,20 +103,10 @@ void ps4_l2cap_send_hid( hid_cmd_t *hid_cmd, uint8_t len ) {
     uint8_t result;
     BT_HDR *p_buf;
 
-    if (!is_connected || l2cap_control_channel == 0) {
-        return;
-    }
-
-    if (is_congested) {
-        ESP_LOGD(PS4_TAG, "[%s] channel congested, skipping command", __func__);
-        return;
-    }
-
     p_buf = (BT_HDR *)osi_malloc(BT_DEFAULT_BUFFER_SIZE);
 
     if (!p_buf) {
         ESP_LOGE(PS4_TAG, "[%s] allocating buffer for sending the command failed", __func__);
-        return;
     }
 
     p_buf->length = len + ( sizeof(*hid_cmd) - sizeof(hid_cmd->data) );
@@ -125,17 +114,19 @@ void ps4_l2cap_send_hid( hid_cmd_t *hid_cmd, uint8_t len ) {
 
     memcpy((uint8_t *)(p_buf + 1) + p_buf->offset, (uint8_t*)hid_cmd, p_buf->length);
 
+    if (l2cap_control_channel == 0) {
+        ESP_LOGE(PS4_TAG, "[%s] l2cap_control_channel not initialized.", __func__);
+    }
     result = L2CA_DataWrite(l2cap_control_channel, p_buf );
 
-    if (result == L2CAP_DW_SUCCESS) {
-        // success
-    } else if (result == L2CAP_DW_CONGESTED) {
+    if (result == L2CAP_DW_SUCCESS)
+        ESP_LOGI(PS4_TAG, "[%s] sending command: success", __func__);
+
+    if (result == L2CAP_DW_CONGESTED)
         ESP_LOGW(PS4_TAG, "[%s] sending command: congested", __func__);
-        is_congested = true;
-    } else if (result == L2CAP_DW_FAILED) {
+
+    if (result == L2CAP_DW_FAILED)
         ESP_LOGE(PS4_TAG, "[%s] sending command: failed", __func__);
-        osi_free(p_buf);
-    }
 }
 
 
@@ -285,9 +276,6 @@ void ps4_l2cap_config_ind_cback(uint16_t l2cap_cid, tL2CAP_CFG_INFO *p_cfg) {
 void ps4_l2cap_disconnect_ind_cback(uint16_t l2cap_cid, bool ack_needed) {
     ESP_LOGI(PS4_TAG, "[%s] l2cap_cid: 0x%02x\n  ack_needed: %d", __func__, l2cap_cid, ack_needed );
     is_connected = false;
-    is_congested = false;
-    l2cap_control_channel = 0;
-    l2cap_interrupt_channel = 0;
     if (ack_needed) {
         L2CA_DisconnectRsp(l2cap_cid);
     }
@@ -340,5 +328,4 @@ static void ps4_l2cap_data_ind_cback(uint16_t l2cap_cid, BT_HDR *p_buf) {
 *******************************************************************************/
 static void ps4_l2cap_congest_cback (uint16_t l2cap_cid, bool congested) {
     ESP_LOGI(PS4_TAG, "[%s] l2cap_cid: 0x%02x\n  congested: %d", __func__, l2cap_cid, congested );
-    is_congested = congested;
 }
