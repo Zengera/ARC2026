@@ -90,6 +90,19 @@ void ps4_l2cap_deinit_services() {
     ps4_l2cap_deinit_service("PS4-HIDI", BT_PSM_HID_INTERRUPT);
 }
 
+void ps4_l2cap_disconnect() {
+    if (l2cap_control_channel != 0) {
+        L2CA_DisconnectReq(l2cap_control_channel);
+        l2cap_control_channel = 0;
+    }
+    if (l2cap_interrupt_channel != 0) {
+        L2CA_DisconnectReq(l2cap_interrupt_channel);
+        l2cap_interrupt_channel = 0;
+    }
+    is_connected = false;
+    is_congested = false;
+}
+
 
 /*******************************************************************************
 **

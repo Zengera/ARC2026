@@ -46,6 +46,19 @@ void ps4Init() {
   ps4_l2cap_init_services();
 }
 
+void ps4Disconnect() {
+  is_active = false;
+  ps4_l2cap_disconnect();
+  ps4_l2cap_deinit_services();
+  ps4_l2cap_init_services();
+  if (ps4_connection_cb != NULL) {
+    ps4_connection_cb(false);
+  }
+  if (ps4_connection_object_cb != NULL && ps4_connection_object != NULL) {
+    ps4_connection_object_cb(ps4_connection_object, false);
+  }
+}
+
 /*******************************************************************************
 **
 ** Function         ps4IsConnected
@@ -234,6 +247,12 @@ void ps4ConnectEvent(uint8_t is_connected) {
         ps4Enable();
     } else {
         is_active = false;
+        if (ps4_connection_cb != NULL) {
+            ps4_connection_cb(false);
+        }
+        if (ps4_connection_object_cb != NULL && ps4_connection_object != NULL) {
+            ps4_connection_object_cb(ps4_connection_object, false);
+        }
     }
 }
 
