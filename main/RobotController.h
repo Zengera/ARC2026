@@ -9,8 +9,8 @@
 class RobotController
 {
 public:
-    static constexpr gpio_num_t PIN_IR_HIGH = GPIO_NUM_2;
-    static constexpr gpio_num_t PIN_IR_LOW  = GPIO_NUM_4;
+    static constexpr gpio_num_t PIN_IR_HIGH = GPIO_NUM_23;
+    static constexpr gpio_num_t PIN_IR_LOW  = GPIO_NUM_12;
 
     RobotController();
     ~RobotController() = default;

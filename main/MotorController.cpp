@@ -1,6 +1,8 @@
 #include "MotorController.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <algorithm>
+#include <cmath>
 
 static const char *TAG = "MotorController";
 
@@ -48,7 +50,7 @@ void MotorController::begin()
         m_channelDuty[i] = 0;
     }
 
-    coastStop();
+    stopImmediate();
 }
 
 void MotorController::setChannelDuty(ledc_channel_t channel, uint32_t duty)
@@ -63,7 +65,7 @@ void MotorController::setChannelDuty(ledc_channel_t channel, uint32_t duty)
     ledc_update_duty(LEDC_SPEED_MODE, channel);
 }
 
-void MotorController::setSpeeds(int16_t left, int16_t right)
+void MotorController::applyPwm(int16_t left, int16_t right)
 {
     left  = std::clamp<int16_t>(left, -255, 255);
     right = std::clamp<int16_t>(right, -255, 255);
@@ -96,6 +98,153 @@ void MotorController::setSpeeds(int16_t left, int16_t right)
     }
 }
 
+float MotorController::stepRamp(float current, int16_t target, float dt)
+{
+    // 非ゼロの目標速度が最低PWM未満の場合は最低PWMへ補正（不感帯補正）
+    if (m_minPwm > 0) {
+        if (target > 0 && target < m_minPwm) {
+            target = m_minPwm;
+        } else if (target < 0 && target > -static_cast<int16_t>(m_minPwm)) {
+            target = -static_cast<int16_t>(m_minPwm);
+        }
+    }
+
+    const float targetF = static_cast<float>(target);
+    const float minPwmF = static_cast<float>(m_minPwm);
+
+    if (std::abs(current - targetF) < 0.01f) {
+        return targetF;
+    }
+
+    // ゼロ停止状態からの加速判定
+    if (std::abs(current) < 0.001f) {
+        if (targetF > 0.0f) {
+            // 正方向への加速開始: 最低PWMからスタート
+            float startSpeed = (minPwmF > 0.0f) ? minPwmF : 0.0f;
+            float next = startSpeed + m_accelRate * dt;
+            return (next > targetF) ? targetF : next;
+        } else if (targetF < 0.0f) {
+            // 負方向への加速開始: -最低PWMからスタート
+            float startSpeed = (minPwmF > 0.0f) ? -minPwmF : 0.0f;
+            float next = startSpeed - m_accelRate * dt;
+            return (next < targetF) ? targetF : next;
+        } else {
+            return 0.0f;
+        }
+    } else if (current > 0.0f) {
+        // 現在前進中
+        if (targetF > current) {
+            // 前進方向への加速
+            float next = current + m_accelRate * dt;
+            return (next > targetF) ? targetF : next;
+        } else if (targetF >= minPwmF) {
+            // 最低PWM以上の目標値へ減速
+            float next = current - m_decelRate * dt;
+            return (next < targetF) ? targetF : next;
+        } else {
+            // targetF < minPwmF (0へ停止減速、または逆転への反転)
+            float next = current - m_decelRate * dt;
+            // 最低PWMを下回ったら0へスナップ（モータ停止または反転デッドタイム）
+            if (next < minPwmF) {
+                return 0.0f;
+            }
+            return next;
+        }
+    } else {
+        // 現在後退中 (current < 0.0f)
+        if (targetF < current) {
+            // 後退方向への加速
+            float next = current - m_accelRate * dt;
+            return (next < targetF) ? targetF : next;
+        } else if (targetF <= -minPwmF) {
+            // -最低PWM以下の目標値へ減速
+            float next = current + m_decelRate * dt;
+            return (next > targetF) ? targetF : next;
+        } else {
+            // targetF > -minPwmF (0へ停止減速、または正転への反転)
+            float next = current + m_decelRate * dt;
+            // -最低PWMを上回ったら0へスナップ（モータ停止または反転デッドタイム）
+            if (next > -minPwmF) {
+                return 0.0f;
+            }
+            return next;
+        }
+    }
+}
+
+void MotorController::update()
+{
+    if (m_isBraking) {
+        return;
+    }
+
+    if (!m_rampEnabled) {
+        int16_t targetLeft  = m_targetLeftSpeed;
+        int16_t targetRight = m_targetRightSpeed;
+        if (m_minPwm > 0) {
+            if (targetLeft > 0 && targetLeft < m_minPwm) {
+                targetLeft = m_minPwm;
+            } else if (targetLeft < 0 && targetLeft > -static_cast<int16_t>(m_minPwm)) {
+                targetLeft = -static_cast<int16_t>(m_minPwm);
+            }
+            if (targetRight > 0 && targetRight < m_minPwm) {
+                targetRight = m_minPwm;
+            } else if (targetRight < 0 && targetRight > -static_cast<int16_t>(m_minPwm)) {
+                targetRight = -static_cast<int16_t>(m_minPwm);
+            }
+        }
+        m_currentLeftSpeed  = static_cast<float>(targetLeft);
+        m_currentRightSpeed = static_cast<float>(targetRight);
+        applyPwm(targetLeft, targetRight);
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+    float dt = 0.01f;
+    if (m_lastUpdateTimeUs > 0) {
+        dt = static_cast<float>(now - m_lastUpdateTimeUs) / 1000000.0f;
+        if (dt <= 0.0f || dt > 0.1f) {
+            dt = 0.01f;
+        }
+    }
+    m_lastUpdateTimeUs = now;
+
+    m_currentLeftSpeed  = stepRamp(m_currentLeftSpeed, m_targetLeftSpeed, dt);
+    m_currentRightSpeed = stepRamp(m_currentRightSpeed, m_targetRightSpeed, dt);
+
+    int16_t leftOut  = static_cast<int16_t>(std::round(m_currentLeftSpeed));
+    int16_t rightOut = static_cast<int16_t>(std::round(m_currentRightSpeed));
+
+    // 最低PWM未満の微小出力を遮断（0停止）
+    if (m_minPwm > 0) {
+        if (leftOut > 0 && leftOut < m_minPwm) {
+            leftOut = 0;
+        } else if (leftOut < 0 && leftOut > -static_cast<int16_t>(m_minPwm)) {
+            leftOut = 0;
+        }
+        if (rightOut > 0 && rightOut < m_minPwm) {
+            rightOut = 0;
+        } else if (rightOut < 0 && rightOut > -static_cast<int16_t>(m_minPwm)) {
+            rightOut = 0;
+        }
+    }
+
+    applyPwm(leftOut, rightOut);
+}
+
+void MotorController::setTargetSpeeds(int16_t left, int16_t right)
+{
+    m_isBraking = false;
+    m_targetLeftSpeed  = std::clamp<int16_t>(left, -255, 255);
+    m_targetRightSpeed = std::clamp<int16_t>(right, -255, 255);
+}
+
+void MotorController::setSpeeds(int16_t left, int16_t right)
+{
+    setTargetSpeeds(left, right);
+    update();
+}
+
 void MotorController::forward(uint8_t speed)
 {
     setSpeeds(speed, speed);
@@ -118,8 +267,16 @@ void MotorController::turnRight(uint8_t speed)
 
 void MotorController::brake()
 {
-    m_leftSpeed  = 0;
-    m_rightSpeed = 0;
+    m_isBraking         = true;
+    m_targetLeftSpeed   = 0;
+    m_targetRightSpeed  = 0;
+    m_currentLeftSpeed  = 0.0f;
+    m_currentRightSpeed = 0.0f;
+    m_leftSpeed         = 0;
+    m_rightSpeed        = 0;
+    m_lastUpdateTimeUs  = esp_timer_get_time();
+
+    // ショートブレーキ (HH)
     setChannelDuty(LEDC_CHANNEL_LEFT_A, 255);
     setChannelDuty(LEDC_CHANNEL_LEFT_B, 255);
     setChannelDuty(LEDC_CHANNEL_RIGHT_A, 255);
@@ -128,38 +285,48 @@ void MotorController::brake()
 
 void MotorController::coastStop()
 {
-    m_leftSpeed  = 0;
-    m_rightSpeed = 0;
-    setChannelDuty(LEDC_CHANNEL_LEFT_A, 0);
-    setChannelDuty(LEDC_CHANNEL_LEFT_B, 0);
-    setChannelDuty(LEDC_CHANNEL_RIGHT_A, 0);
-    setChannelDuty(LEDC_CHANNEL_RIGHT_B, 0);
+    m_isBraking = false;
+    setTargetSpeeds(0, 0);
+    update();
+}
+
+void MotorController::stopImmediate()
+{
+    m_isBraking         = false;
+    m_targetLeftSpeed   = 0;
+    m_targetRightSpeed  = 0;
+    m_currentLeftSpeed  = 0.0f;
+    m_currentRightSpeed = 0.0f;
+    m_lastUpdateTimeUs  = esp_timer_get_time();
+
+    applyPwm(0, 0);
 }
 
 void MotorController::executeCommand(MotionCommand cmd, int16_t left_speed, int16_t right_speed)
 {
     switch (cmd) {
     case MotionCommand::FORWARD:
-        forward(255);
+        setTargetSpeeds(255, 255);
         break;
     case MotionCommand::BACKWARD:
-        backward(255);
+        setTargetSpeeds(-255, -255);
         break;
     case MotionCommand::TURN_LEFT:
-        turnLeft(255);
+        setTargetSpeeds(-255, 255);
         break;
     case MotionCommand::TURN_RIGHT:
-        turnRight(255);
+        setTargetSpeeds(255, -255);
         break;
     case MotionCommand::BRAKE:
         brake();
-        break;
+        return;
     case MotionCommand::MIXED_DRIVE:
-        setSpeeds(left_speed, right_speed);
+        setTargetSpeeds(left_speed, right_speed);
         break;
     case MotionCommand::COAST_STOP:
     default:
-        coastStop();
+        setTargetSpeeds(0, 0);
         break;
     }
+    update();
 }
