@@ -178,64 +178,30 @@ void MotorController::update()
         return;
     }
 
-    if (!m_rampEnabled) {
-        int16_t targetLeft  = m_targetLeftSpeed;
-        int16_t targetRight = m_targetRightSpeed;
-        if (m_minPwm > 0) {
-            if (targetLeft > 0 && targetLeft < m_minPwm) {
-                targetLeft = m_minPwm;
-            } else if (targetLeft < 0 && targetLeft > -static_cast<int16_t>(m_minPwm)) {
-                targetLeft = -static_cast<int16_t>(m_minPwm);
-            }
-            if (targetRight > 0 && targetRight < m_minPwm) {
-                targetRight = m_minPwm;
-            } else if (targetRight < 0 && targetRight > -static_cast<int16_t>(m_minPwm)) {
-                targetRight = -static_cast<int16_t>(m_minPwm);
-            }
-        }
-        m_currentLeftSpeed  = static_cast<float>(targetLeft);
-        m_currentRightSpeed = static_cast<float>(targetRight);
-        applyPwm(targetLeft, targetRight);
-        return;
-    }
-
-    int64_t now = esp_timer_get_time();
-    float dt = 0.01f;
-    if (m_lastUpdateTimeUs > 0) {
-        dt = static_cast<float>(now - m_lastUpdateTimeUs) / 1000000.0f;
-        if (dt <= 0.0f || dt > 0.1f) {
-            dt = 0.01f;
-        }
-    }
-    m_lastUpdateTimeUs = now;
-
-    m_currentLeftSpeed  = stepRamp(m_currentLeftSpeed, m_targetLeftSpeed, dt);
-    m_currentRightSpeed = stepRamp(m_currentRightSpeed, m_targetRightSpeed, dt);
-
-    int16_t leftOut  = static_cast<int16_t>(std::round(m_currentLeftSpeed));
-    int16_t rightOut = static_cast<int16_t>(std::round(m_currentRightSpeed));
-
-    // 最低PWM未満の微小出力を遮断（0停止）
+    int16_t targetLeft  = m_targetLeftSpeed;
+    int16_t targetRight = m_targetRightSpeed;
     if (m_minPwm > 0) {
-        if (leftOut > 0 && leftOut < m_minPwm) {
-            leftOut = 0;
-        } else if (leftOut < 0 && leftOut > -static_cast<int16_t>(m_minPwm)) {
-            leftOut = 0;
+        if (targetLeft > 0 && targetLeft < m_minPwm) {
+            targetLeft = m_minPwm;
+        } else if (targetLeft < 0 && targetLeft > -static_cast<int16_t>(m_minPwm)) {
+            targetLeft = -static_cast<int16_t>(m_minPwm);
         }
-        if (rightOut > 0 && rightOut < m_minPwm) {
-            rightOut = 0;
-        } else if (rightOut < 0 && rightOut > -static_cast<int16_t>(m_minPwm)) {
-            rightOut = 0;
+        if (targetRight > 0 && targetRight < m_minPwm) {
+            targetRight = m_minPwm;
+        } else if (targetRight < 0 && targetRight > -static_cast<int16_t>(m_minPwm)) {
+            targetRight = -static_cast<int16_t>(m_minPwm);
         }
     }
-
-    applyPwm(leftOut, rightOut);
+    m_currentLeftSpeed  = static_cast<float>(targetLeft);
+    m_currentRightSpeed = static_cast<float>(targetRight);
+    applyPwm(targetLeft, targetRight);
+    return;
 }
 
 void MotorController::setTargetSpeeds(int16_t left, int16_t right)
 {
     m_isBraking = false;
-    m_targetLeftSpeed  = std::clamp<int16_t>(left, -255, 255);
+    m_targetLeftSpeed  = std::clamp<int16_t>(left, -250, 250);
     m_targetRightSpeed = std::clamp<int16_t>(right, -255, 255);
 }
 

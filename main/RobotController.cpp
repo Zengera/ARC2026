@@ -112,7 +112,7 @@ void RobotController::printPeriodicLog()
 {
     TickType_t now = xTaskGetTickCount();
     // 1秒ごと (1000ms)
-    if ((now - m_lastLogTick) >= pdMS_TO_TICKS(1000)) {
+    if ((now - m_lastLogTick) >= pdMS_TO_TICKS(100)) {
         m_lastLogTick = now;
 
         // IR制御中であってもPS4入力は取得・表示を継続する

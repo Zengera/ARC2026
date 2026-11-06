@@ -9,19 +9,19 @@
 class MotorController
 {
 public:
-    static constexpr gpio_num_t PIN_LEFT_A  = GPIO_NUM_18;
-    static constexpr gpio_num_t PIN_LEFT_B  = GPIO_NUM_19;
-    static constexpr gpio_num_t PIN_RIGHT_A = GPIO_NUM_22;
-    static constexpr gpio_num_t PIN_RIGHT_B = GPIO_NUM_23;
+    static constexpr gpio_num_t PIN_LEFT_A  = GPIO_NUM_15;
+    static constexpr gpio_num_t PIN_LEFT_B  = GPIO_NUM_2;
+    static constexpr gpio_num_t PIN_RIGHT_A = GPIO_NUM_4;
+    static constexpr gpio_num_t PIN_RIGHT_B = GPIO_NUM_16;
 
     // デフォルトの加減速度パラメータ (PWM単位 / 秒)
-    // 0 -> 255: 約0.50秒 (510 PWM/s)
-    // 255 -> 0: 約0.30秒 (850 PWM/s)
-    static constexpr float DEFAULT_ACCELERATION = 510.0f;
-    static constexpr float DEFAULT_DECELERATION = 850.0f;
+    // 0 -> 255: 約0.125秒 (2000 PWM/s)
+    // 255 -> 0: 約0.125秒 (2000 PWM/s)
+    static constexpr float DEFAULT_ACCELERATION = 3000.0f;
+    static constexpr float DEFAULT_DECELERATION = 25500.0f;
 
-    // 最低PWMのデフォルト値 (25% = 64)
-    static constexpr uint8_t DEFAULT_MIN_PWM = 64;
+    // 最低PWMのデフォルト値 (50% = 128)
+    static constexpr uint8_t DEFAULT_MIN_PWM = 220;
 
     MotorController();
     ~MotorController() = default;
@@ -91,8 +91,8 @@ public:
     /**
      * @brief 現在の実出力速度を取得 (-255 〜 +255)
      */
-    int16_t getLeftSpeed() const { return m_leftSpeed; }
-    int16_t getRightSpeed() const { return m_rightSpeed; }
+    int16_t getLeftSpeed() const { return m_currentLeftSpeed; }
+    int16_t getRightSpeed() const { return m_currentRightSpeed; }
 
     /**
      * @brief 現在の目標速度を取得 (-255 〜 +255)
@@ -114,11 +114,6 @@ public:
     void setMinPwm(uint8_t minPwm) { m_minPwm = minPwm; }
     uint8_t getMinPwm() const { return m_minPwm; }
 
-    /**
-     * @brief 台形加減速制御の有効/無効切り替え
-     */
-    void setRampEnabled(bool enabled) { m_rampEnabled = enabled; }
-    bool isRampEnabled() const { return m_rampEnabled; }
 
 private:
     void setChannelDuty(ledc_channel_t channel, uint32_t duty);
@@ -138,7 +133,6 @@ private:
     float m_decelRate{DEFAULT_DECELERATION};
     uint8_t m_minPwm{DEFAULT_MIN_PWM};
     int64_t m_lastUpdateTimeUs{0};
-    bool m_rampEnabled{true};
     bool m_isBraking{false};
 };
 

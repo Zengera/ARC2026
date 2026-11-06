@@ -19,7 +19,7 @@ extern "C" void app_main(void)
     setup();
 
     TickType_t lastWakeTime = xTaskGetTickCount();
-    const TickType_t period = pdMS_TO_TICKS(10); // 10ms 制御周期
+    const TickType_t period = pdMS_TO_TICKS(10); // 5ms 制御周期
 
     while (1) {
         loop();
